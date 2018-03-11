@@ -66,33 +66,41 @@ namespace Pivet.Data
             double total = 0;
             if (config.CommitByOprid)
             {
-                List<ChangedItem> newOrModifiedFiles = new List<ChangedItem>();
                 total = changedOrNewItems.Count;
 
+		var changedFiles = new Dictionary<string, List<string>>();
                 foreach (var f in changedOrNewItems)
                 {
-                    newOrModifiedFiles.Add(adds.Where(p => p.RepoPath == f).First());
+		    var temp = adds.Where(p => p.RepoPath == f).First();
+		    if(changedFiles.ContainsKey(temp.OperatorId))
+                    {
+                        changedFiles[temp.OperatorId].Add(temp.RepoPath);
+                    }
+		    else
+                    {
+			var newList = new List<string>();
+			newList.Add(temp.RepoPath);
+                        changedFiles.Add(temp.OperatorId, newList);
+                    }
                     current++;
                     ReportProgress(((int)(((current / total) * 10000)) / (double)100));
                 }
 
-                Logger.Write("Processing OPRID groups...");
-                var opridGroups = newOrModifiedFiles.GroupBy(p => p.OperatorId);
-
                 Logger.Write("Processing staged changes...");
                 Logger.Write("");
-                foreach (var opr in opridGroups)
+		current = 0;
+		total = changedFiles.Count;
+                foreach (var opr in changedFiles)
                 {
-                    var staged = opr.Select(o => o.RepoPath).ToList();
-                    Commands.Stage(_repository, staged);
+                    Commands.Stage(_repository, opr.Value);
+                    var oprid = opr.Key;
+                    Signature author = new Signature(oprid, oprid, DateTime.Now);
+                    Signature committer = author;
+                    Commit commit = _repository.Commit("Changes made by " + oprid, author, committer);
 
-                    if (newOrModifiedFiles.Count > 0)
-                    {
-                        var oprid = opr.Key;
-                        Signature author = new Signature(oprid, oprid, DateTime.Now);
-                        Signature committer = author;
-                        Commit commit = _repository.Commit("Changes made by " + oprid, author, committer);
-                    }
+		    //Advance progress by one user each iteration
+		    current++;
+		    ReportProgress(((int)(((current / total) * 10000)) / (double)100));
                 }
             }
             else //not by oprid
