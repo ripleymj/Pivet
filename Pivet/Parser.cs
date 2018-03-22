@@ -274,6 +274,7 @@ namespace PeopleCodeLib.Decoder
             var decompiledText = GetProgramByKeys(conn, keys);
             var storedTextBuilder = new StringBuilder();
 
+            conn.Open();
             using (var getProgText = new OracleCommand("SELECT PCTEXT FROM PSPCMTXT WHERE OBJECTID1 = :1 AND OBJECTVALUE1 = :2 AND OBJECTID2 = :3 AND OBJECTVALUE2 = :4 AND OBJECTID3 = :5 AND OBJECTVALUE3 = :6 AND OBJECTID4 = :7 AND OBJECTVALUE4 = :8 AND OBJECTID5 = :9 AND OBJECTVALUE5 = :10 AND OBJECTID6 = :11 AND OBJECTVALUE6 = :12 AND OBJECTID7 = :13 AND OBJECTVALUE7 = :14 ORDER BY PROGSEQ", conn))
             {
 
@@ -305,9 +306,11 @@ namespace PeopleCodeLib.Decoder
                     }
                 }
             }
+
             decompiledText = decompiledText.Replace("\r\n", "\n").Replace("\n", "\r\n");
             var storedText = storedTextBuilder.ToString().Replace("\r\n", "\n").Replace("\n", "\r\n").Trim();
 
+            conn.Close();
             return new Tuple<string, string, bool>(decompiledText, storedText, decompiledText.Equals(storedText));
         }
 
@@ -318,6 +321,9 @@ namespace PeopleCodeLib.Decoder
                 keys.Add(new Tuple<int, string>(0, " "));
             }
             MemoryStream ms = new MemoryStream();
+            List<Dictionary<string, string>> references = new List<Dictionary<string, string>>();
+
+            conn.Open();
             using (var getProgram = new OracleCommand("SELECT PROGTXT FROM PSPCMPROG WHERE OBJECTID1 = :1 AND OBJECTVALUE1 = :2 AND OBJECTID2 = :3 AND OBJECTVALUE2 = :4 AND OBJECTID3 = :5 AND OBJECTVALUE3 = :6 AND OBJECTID4 = :7 AND OBJECTVALUE4 = :8 AND OBJECTID5 = :9 AND OBJECTVALUE5 = :10 AND OBJECTID6 = :11 AND OBJECTVALUE6 = :12 AND OBJECTID7 = :13 AND OBJECTVALUE7 = :14 ORDER BY PROGSEQ", conn))
             {
 
@@ -349,9 +355,7 @@ namespace PeopleCodeLib.Decoder
                 }
                 getProgram.Dispose();
             }
-            List<Dictionary<string, string>> references = new List<Dictionary<string, string>>();
 
-            //            using (var getReferences = new OracleCommand("SELECT NAMENUM, RECNAME, REFNAME, PACKAGEROOT, QUALIFYPATH FROM PSPCMNAME WHERE OBJECTID1 = :1 AND OBJECTVALUE1 = :2 AND OBJECTID2 = :3 AND OBJECTVALUE2 = :4 AND OBJECTID3 = :5 AND OBJECTVALUE3 = :6 AND OBJECTID4 = :7 AND OBJECTVALUE4 = :8 AND OBJECTID5 = :9 AND OBJECTVALUE5 = :10 AND OBJECTID6 = :11 AND OBJECTVALUE6 = :12 AND OBJECTID7 = :13 AND OBJECTVALUE7 = :14 order by NAMENUM", conn))
             using (var getReferences = new OracleCommand("SELECT NAMENUM, RECNAME, REFNAME FROM PSPCMNAME WHERE OBJECTID1 = :1 AND OBJECTVALUE1 = :2 AND OBJECTID2 = :3 AND OBJECTVALUE2 = :4 AND OBJECTID3 = :5 AND OBJECTVALUE3 = :6 AND OBJECTID4 = :7 AND OBJECTVALUE4 = :8 AND OBJECTID5 = :9 AND OBJECTVALUE5 = :10 AND OBJECTID6 = :11 AND OBJECTVALUE6 = :12 AND OBJECTID7 = :13 AND OBJECTVALUE7 = :14 order by NAMENUM", conn))
             {
 
@@ -387,6 +391,7 @@ namespace PeopleCodeLib.Decoder
 
                 getReferences.Dispose();
             }
+            conn.Close();
             Parser p = new Parser();
 
             return p.ParsePPC(ms.ToArray(), references);

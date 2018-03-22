@@ -19,7 +19,6 @@ namespace Pivet.Data.Processors
         public string ProcessorID => "PeopleCodeProcessor";
         public event ProgressHandler ProgressChanged;
 
-        //public int LoadItems(OracleConnection conn, FilterConfig filters, int modifyThreshold, VersionState versionState)
         public int LoadItems(OracleConnection conn, FilterConfig filters)
         {
             Logger.Write("Loading Peoplecode Definitions.");
@@ -61,22 +60,21 @@ namespace Pivet.Data.Processors
             var ppcDirectory = Path.Combine(rootFolder, "PeopleCode");
 
             double total = selectedItems.Count;
-            double current = 0;
+     //       double current = 0;
 
             if (total == 0)
             {
                 ReportProgress(100);
             }
 
-            foreach (var i in selectedItems)
+            Parallel.ForEach(selectedItems, new ParallelOptions {MaxDegreeOfParallelism = 8}, (i) => 
             {
-                if (i.SaveToDirectory(_conn, ppcDirectory)) {
+                OracleConnection conn = (OracleConnection)_conn.Clone();
+                if (i.SaveToDirectory(conn, ppcDirectory)) {
                     changes.Add(new ChangedItem(i.FilePath, i.lastOprid));
                 }
+            });
 
-                current++;
-                ReportProgress(((int)(((current / total) * 10000))/(double)100));
-            }
             return changes;
         }
 
@@ -92,29 +90,30 @@ namespace Pivet.Data.Processors
 
         private void LoadAllItemsFromDB()
         {
-            using (var cmd = new OracleCommand("SELECT OBJECTID1, OBJECTVALUE1, OBJECTID2, OBJECTVALUE2, OBJECTID3, OBJECTVALUE3, OBJECTID4, OBJECTVALUE4, OBJECTID5, OBJECTVALUE5, OBJECTID6, OBJECTVALUE6, OBJECTID7, OBJECTVALUE7, LASTUPDDTTM, LASTUPDOPRID from PSPCMPROG WHERE PROGSEQ = 0", _conn))
-            {
-
-                using (var reader = cmd.ExecuteReader())
+                _conn.Open();
+                using (var cmd = new OracleCommand("SELECT OBJECTID1, OBJECTVALUE1, OBJECTID2, OBJECTVALUE2, OBJECTID3, OBJECTVALUE3, OBJECTID4, OBJECTVALUE4, OBJECTID5, OBJECTVALUE5, OBJECTID6, OBJECTVALUE6, OBJECTID7, OBJECTVALUE7, LASTUPDDTTM, LASTUPDOPRID from PSPCMPROG WHERE PROGSEQ = 0", _conn))
                 {
-                    while (reader.Read())
+                    using (var reader = cmd.ExecuteReader())
                     {
-                        List<Tuple<int, string>> keys = new List<Tuple<int, string>>();
-                        keys.Add(new Tuple<int, string>(reader.GetInt32(0), reader.GetString(1)));
-                        keys.Add(new Tuple<int, string>(reader.GetInt32(2), reader.GetString(3)));
-                        keys.Add(new Tuple<int, string>(reader.GetInt32(4), reader.GetString(5)));
-                        keys.Add(new Tuple<int, string>(reader.GetInt32(6), reader.GetString(7)));
-                        keys.Add(new Tuple<int, string>(reader.GetInt32(8), reader.GetString(9)));
-                        keys.Add(new Tuple<int, string>(reader.GetInt32(10), reader.GetString(11)));
-                        keys.Add(new Tuple<int, string>(reader.GetInt32(12), reader.GetString(13)));
+                        while (reader.Read())
+                        {
+                            List<Tuple<int, string>> keys = new List<Tuple<int, string>>();
+                            keys.Add(new Tuple<int, string>(reader.GetInt32(0), reader.GetString(1)));
+                            keys.Add(new Tuple<int, string>(reader.GetInt32(2), reader.GetString(3)));
+                            keys.Add(new Tuple<int, string>(reader.GetInt32(4), reader.GetString(5)));
+                            keys.Add(new Tuple<int, string>(reader.GetInt32(6), reader.GetString(7)));
+                            keys.Add(new Tuple<int, string>(reader.GetInt32(8), reader.GetString(9)));
+                            keys.Add(new Tuple<int, string>(reader.GetInt32(10), reader.GetString(11)));
+                            keys.Add(new Tuple<int, string>(reader.GetInt32(12), reader.GetString(13)));
 
-                        var lastUpdateTime = reader.GetDateTime(14);
-                        var lastOprid = reader.GetString(15);
+                            var lastUpdateTime = reader.GetDateTime(14);
+                            var lastOprid = reader.GetString(15);
 
-                        selectedItems.Add(new PeopleCodeItem(keys, lastOprid, lastUpdateTime));
+                            selectedItems.Add(new PeopleCodeItem(keys, lastOprid, lastUpdateTime));
+                        }
                     }
                 }
-            }
+                _conn.Close();
         }
 
         private void FilterByProjects(List<string> projectNames)
@@ -214,12 +213,9 @@ namespace Pivet.Data.Processors
 
     class PeopleCodeItem
     {
-        private string _programText;
         internal List<Tuple<int, string>> Keys;
         public string lastOprid;
         DateTime lastUpdate;
-        private bool _saved;
-        public bool Saved { get { return _saved; } }
         public string FilePath;
         public string Name
         {
@@ -238,14 +234,6 @@ namespace Pivet.Data.Processors
             }
         }
 
-        public string ProgramText
-        {
-            get
-            {
-                return _programText;
-            }
-        }
-
         public PeopleCodeItem(List<Tuple<int, string>> keys, string oprid, DateTime lastUpdate)
         {
             this.Keys = keys;
@@ -253,9 +241,9 @@ namespace Pivet.Data.Processors
             this.lastUpdate = lastUpdate;
         }
 
-        public void LoadFromDB(OracleConnection conn)
+        public string LoadFromDB(OracleConnection conn)
         {
-            _programText = Parser.GetProgramByKeys(conn, Keys);
+            return Parser.GetProgramByKeys(conn, Keys);
         }
         public string GetFullFilePath(string rootPath)
         {
@@ -325,11 +313,9 @@ namespace Pivet.Data.Processors
         internal bool SaveToDirectory(OracleConnection conn, string outputPath)
         {
             var separator = Path.DirectorySeparatorChar;
-
            
             /* load the PPC from the DB */
-            LoadFromDB(conn);
-
+            string _programText = LoadFromDB(conn);
             
             this.FilePath = GetFullFilePath(outputPath);
 
@@ -337,11 +323,8 @@ namespace Pivet.Data.Processors
             var directory = this.FilePath.Substring(0, this.FilePath.LastIndexOf(Path.DirectorySeparatorChar));
 
             Directory.CreateDirectory(directory);
-            
 
             File.WriteAllText(this.FilePath, _programText);
-            _programText = null;
-            _saved = true;
             return true;
         }
         internal string MakeValidDirectory(string directory)

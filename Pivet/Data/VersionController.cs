@@ -63,6 +63,9 @@ namespace Pivet.Data
 
             List<string> changedOrNewItems = _repository.RetrieveStatus().Where(p => p.State == FileStatus.ModifiedInWorkdir || p.State == FileStatus.NewInWorkdir).Select(o => o.FilePath).ToList();
             List<string> deletedFiles = _repository.RetrieveStatus().Where(p => p.State == FileStatus.DeletedFromWorkdir || p.State == FileStatus.DeletedFromIndex).Select(o => o.FilePath).ToList();
+
+            Logger.Write("Got repository status");
+            Logger.Write("");
             double total = 0;
             if (config.CommitByOprid)
             {

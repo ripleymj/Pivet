@@ -23,17 +23,20 @@ namespace Pivet.Data.Connection
                 Environment.SetEnvironmentVariable("TNS_ADMIN", connParams.TNS_ADMIN);
             }
 
-            OracleConnection conn = new OracleConnection($"Data Source={connParams.TNS};User Id={connParams.BootstrapParameters.User}; Password={connParams.BootstrapParameters.Password};Connection Timeout=120");
+            OracleConnectionStringBuilder csb = new OracleConnectionStringBuilder();
+            csb.DataSource = $"{connParams.TNS}";
+            csb.UserID = $"{connParams.BootstrapParameters.User}";
+            csb.Password = $"{connParams.BootstrapParameters.Password}";
+            csb.ConnectionTimeout = 120;
+            csb.MaxPoolSize = 20;
+            csb.MinPoolSize = 20;
+            csb.ConnectionTimeout = 60;
+            OracleConnection conn = new OracleConnection(csb.ConnectionString);
+            conn.ConnectionOpen += ConOpenCallback;
 
             try
             {
-                conn.Open();
-                if (connParams.Schema != null && connParams.Schema.Length > 0)
-                {
-                    /* switch our schema */
-                    OracleCommand schemaCommand = new OracleCommand($"ALTER SESSION SET CURRENT_SCHEMA={connParams.Schema}", conn);
-                    schemaCommand.ExecuteNonQuery();
-                }
+            //    conn.Open();
                 return new Tuple<OracleConnection, bool, string>(conn, true, "");
             }
             catch (Exception ex)
@@ -45,6 +48,17 @@ namespace Pivet.Data.Connection
         public void SetParameters(ConnectionConfig parms)
         {
             connParams = parms;
+        }
+
+        public void ConOpenCallback(OracleConnectionOpenEventArgs eventArgs)
+        {
+            Console.WriteLine("opening new connection");
+            if (connParams.Schema != null && connParams.Schema.Length > 0)
+            {
+                OracleCommand cmd = new OracleCommand($"ALTER SESSION SET CURRENT_SCHEMA={connParams.Schema}", eventArgs.Connection);
+                cmd.ExecuteNonQuery();
+                cmd.Dispose();
+            }
         }
     }
 }
